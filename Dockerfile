@@ -17,9 +17,9 @@ COPY target/Demo-1.0-SNAPSHOT.jar app.jar
 
 # Create startup script
 RUN echo '#!/bin/bash\n\
-./wait-for-it.sh cassandra:9042 -t 10\n\
+./wait-for-it.sh cassandra:9042 -t 30\n\
 ./wait-for-it.sh kafka:29092 -t 20\n\
-./wait-for-it.sh ignite:47500 -t 10\n\
+./wait-for-it.sh ignite:47500 -t 60\n\
 exec java ${JAVA_OPTS} -jar app.jar' > /app/startup.sh \
     && chmod +x /app/startup.sh
 
