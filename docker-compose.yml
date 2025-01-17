@@ -1,0 +1,158 @@
+version: '3.8'
+services:
+  cassandra:
+    image: cassandra:latest
+    platform: linux/arm64
+    container_name: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=demo_cluster
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_KEYSPACE=your_keyspace
+    volumes:
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - cassandra_data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
+
+  ignite:
+    image: apacheignite/ignite:latest
+    platform: linux/amd64
+    container_name: ignite
+    ports:
+      - "47500-47509:47500-47509"  # Reduced port range
+      - "10800:10800"
+    environment:
+      - IGNITE_QUIET=false
+      - IGNITE_PERFORMANCE_SUGGESTIONS_DISABLED=true
+      - IGNITE_UPDATE_NOTIFIER=false
+      - IGNITE_CLUSTER_NAME=demoCluster
+      - IGNITE_DISCOVERY_TCP_LOCAL_ADDRESS=ignite
+      - IGNITE_DISCOVERY_TCP_PORT=47500
+      # Reduced memory settings
+      - JAVA_OPTS=-Xms256m -Xmx512m -Djava.net.preferIPv4Stack=true -XX:+UseG1GC -XX:MaxDirectMemorySize=256m
+      - IGNITE_SKIP_CONFIGURATION_CONSISTENCY_CHECK=true
+    volumes:
+      - ignite_data:/opt/ignite/work
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "echo 'SELECT 1' | /opt/ignite/bin/sqlline.sh -u jdbc:ignite:thin://127.0.0.1/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+
+  zookeeper-init:
+    image: busybox
+    entrypoint: ["sh", "-c", "chown -R 1001:1001 /bitnami/zookeeper"]
+    volumes:
+      - zookeeper_data:/bitnami/zookeeper
+    networks:
+      - app-network
+    restart: "no"
+
+  kafka-init:
+    image: busybox
+    entrypoint: ["sh", "-c", "chown -R 1001:1001 /bitnami/kafka"]
+    volumes:
+      - kafka_data:/bitnami/kafka
+    networks:
+      - app-network
+    restart: "no"
+
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    platform: linux/arm64
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    volumes:
+      - zookeeper_data:/bitnami/zookeeper
+    user: "1001"
+    networks:
+      - app-network
+
+  kafka:
+    image: bitnami/kafka:latest
+    platform: linux/arm64
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=INTERNAL://:29092,EXTERNAL://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_LOG_DIRS=/bitnami/kafka/data
+      - KAFKA_CFG_BROKER_ID=1
+    depends_on:
+      - zookeeper
+    volumes:
+      - kafka_data:/bitnami/kafka
+    user: "1001"
+    networks:
+      - app-network
+
+  spring-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: spring-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      - cassandra
+      - kafka
+      - ignite
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_CASSANDRA_CONTACT_POINTS: cassandra
+      SPRING_CASSANDRA_PORT: 9042
+      SPRING_CASSANDRA_LOCAL_DATACENTER: datacenter1
+      SPRING_CASSANDRA_KEYSPACE: your_keyspace
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      IGNITE_QUIET: "false"
+      IGNITE_DISCOVERY_TCP_LOCAL_ADDRESS: spring-app
+      IGNITE_DISCOVERY_TCP_REMOTE_ADDRESSES: ignite:47500
+      JAVA_OPTS: -Xms256m -Xmx512m -XX:MaxDirectMemorySize=256m -XX:+UseG1GC
+    networks:
+      - app-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/actuator/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: on-failure
+
+networks:
+  app-network:
+    driver: bridge
+    name: app-network
+
+volumes:
+  cassandra_data:
+    name: cassandra_data
+  kafka_data:
+    name: kafka_data
+  zookeeper_data:
+    name: zookeeper_data
+  zookeeper_log:
+    name: zookeeper_log
+  ignite_data:
+    name: ignite_data
