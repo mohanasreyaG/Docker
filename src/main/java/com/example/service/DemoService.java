@@ -37,12 +37,21 @@ public class DemoService {
         try {
             // Save to Cassandra
             demoRepository.save(demo);
+            logger.info("Saved demo to Cassandra with ID: {}", demo.getId());
 
             // Try to cache the demo object
             try {
                 demoCache.put(demo.getId(), demo);
+                logger.info("Successfully cached demo with ID: {}", demo.getId());
+                Object cachedValue = demoCache.get(demo.getId());
+                if (cachedValue != null) {
+                    logger.info("Verified cache entry exists for ID: {}", demo.getId());
+                } else {
+                    logger.warn("Cache verification failed for ID: {}", demo.getId());
+                }
+
             } catch (Exception e) {
-                logger.warn("Failed to cache demo object: {}", e.getMessage());
+                logger.error("Failed to cache demo object: {}", e.getMessage());
                 // Continue execution even if caching fails
             }
 
@@ -61,8 +70,10 @@ public class DemoService {
         // Try to get from cache first
         try {
             demo = (Demo) demoCache.get(id);
+            logger.info("Got he entrance from cache {}", demo);
         } catch (Exception e) {
             logger.warn("Failed to retrieve from cache: {}", e.getMessage());
+
         }
 
         if (demo == null) {

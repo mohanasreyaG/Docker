@@ -148,6 +148,8 @@ services:
       IGNITE_DISCOVERY_TIMEOUT: 30000
       IGNITE_CLIENT_MODE: "true"
       IGNITE_PERFORMANCE_SUGGESTIONS_DISABLED: "true"
+      IGNITE_LOG_LEVEL: DEBUG
+#      JAVA_OPTS: "-Xms512m -Xmx1g -DIGNITE_QUIET=false -DIGNITE_LOG_LEVEL=DEBUG"
       JAVA_OPTS: -Xms512m -Xmx1024m -XX:MaxDirectMemorySize=512m -XX:+UseG1GC -Djava.net.preferIPv4Stack=true
     networks:
       app-network:
